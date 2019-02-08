@@ -29,5 +29,5 @@ The program takes up to parameters.
 ```
 --output-name,-o <filename>         Write output to <filename>.png|.txt. Overwrites existing files!
 --output-mode,-o ascii|png          Output mode. Must be build with -DENABLE_PNG for png option.
---palette,-p interpolated|so|parula Only applies in png mode. Specify the color palette to use. Note, that parula is not included in the repository, since it might be copyrighted by Mathworks Inc. You can use the parula palette from a working matlab installation. You might find `parula.py` come in handy.
+--palette,-p interpolated|so|parula Only applies in png mode. Specify the color palette to use. Note, that parula is not included in the repository, since it might be copyrighted by Mathworks Inc. You can use the parula palette from a working matlab installation. You might find `convert.py` come in handy.
 ```
