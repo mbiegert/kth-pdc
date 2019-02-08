@@ -14,8 +14,8 @@
  * use ./mandelbrot --output-mode png --output-file <filename> --palette so
  * to create png output (if compiled with -DENABLE_PNG, requires libpng)
  * available palettes for png are
- * "so": my favourite, found on stack overflow (see below in function write_png_...)
- * "interpolated": a linear interpolation of the colour values
+ * "so": found on stack overflow (see below in function write_png_...)
+ * "interpolated": my favourite, a linear interpolation of the 8bit colour values RRRGGGBB
  * "parula": requires colormaps_parula.h on compiling, filled in with the Matlab parula palette
  * 
  */
@@ -54,21 +54,21 @@ int main(int argc, char **argv) {
     MPI_Status status;
     int output_mode = OUTPUTMODE_ASCII;
     char* outfile_name = "output";
-    char* palette_name = "so";
+    char* palette_name = "interpolated";
 
     // parameters
     const unsigned int NCOLORS = 256; // Do not change this value. Producing image data
                                       // is only supported for 256 colors.
     const double BOUND = 2.0;
-    const unsigned int PIXEL_HEIGHT = 8192;
-    const unsigned int PIXEL_WIDTH = 8192;
+    const unsigned int PIXEL_HEIGHT = 4096;
+    const unsigned int PIXEL_WIDTH = 4096;
     // define the viewing area
     // specify the bottom left coordinate and height, width
     // default values: -BOUND, -BOUND, 4.0, 4.0
-    const double BOTTOM_LEFT_X = -2.0;
-    const double BOTTOM_LEFT_Y = -1.0;
-    const double IMAGE_HEIGHT = 2.0;
-    const double IMAGE_WIDTH = 2.0;
+    const double BOTTOM_LEFT_X = -0.65;
+    const double BOTTOM_LEFT_Y = 0.475;
+    const double IMAGE_HEIGHT = 0.25;
+    const double IMAGE_WIDTH = 0.25;
 
     // steppings
     // We have a viewing area of [-BOUND, BOUND] x [-BOUND, BOUND]
@@ -170,6 +170,7 @@ int main(int argc, char **argv) {
                 // we receive from any source, the actual sender can later be found in "status"
                 // note also that it is legitimate to use PIXEL_WIDTH*num_rows, since the process 0
                 // always has the highest number of rows to calculate
+                //printf("Will receive max %d bytes.\n", PIXEL_WIDTH*num_rows);
                 rc = MPI_Recv(color, PIXEL_WIDTH*num_rows, MPI_UNSIGNED_CHAR,
                         MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
                 if (rc) {
@@ -186,15 +187,18 @@ int main(int argc, char **argv) {
             // array corresponds to one *row*
             //
             // loop over all rows received
-            for (int received_row = 0; received_row * PIXEL_WIDTH < received_length; ++received_row) {
+            int received_row;
+            for (received_row = 0; received_row * PIXEL_WIDTH < received_length; ++received_row) {
                 // copy one row to the correct offset in the image array
                 assert(received_rank + (unsigned long) received_row * size * PIXEL_WIDTH < (unsigned long) PIXEL_WIDTH * PIXEL_HEIGHT);
-                memcpy(image + received_rank + (unsigned long) received_row * size * PIXEL_WIDTH,
+                memcpy(image + (received_rank + (unsigned long) received_row * size) * PIXEL_WIDTH,
                         color + (unsigned long)received_row * PIXEL_WIDTH,
                         PIXEL_WIDTH * sizeof(unsigned char));
             }
+            //printf("looped over %d rows\n", received_row);
         }
 
+        //printf("image address: 0x%x\n", image);
         // our use for color is over
         free(color);
 
@@ -212,6 +216,7 @@ int main(int argc, char **argv) {
     }
     else {
         // If we are not the collector, just send it over to the process of rank 0
+        printf("Sending %d bytes, rank %d.\n", PIXEL_WIDTH*num_rows, rank);
         rc = MPI_Send(color, PIXEL_WIDTH*num_rows, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         free(color);
     }
@@ -324,7 +329,7 @@ int write_png_image_to_disk(unsigned char* image, const unsigned int PIXEL_WIDTH
     // now we reverse the row ordering, as libpng expects the rows from top to bottom
     for (int row_index = 0; row_index < PIXEL_HEIGHT; ++row_index) {
         // the index formula is derived from image + PIXEL_WIDTH*PIXEL_HEIGHT - row_index*PIXEL_WIDTH
-        rows[row_index] = image + (unsigned long)(PIXEL_HEIGHT - row_index) * PIXEL_WIDTH;
+        rows[row_index] = image + (unsigned long)(PIXEL_HEIGHT - row_index - 1) * PIXEL_WIDTH;
     }
     png_write_image(png_write_ptr, rows);
     png_write_end(png_write_ptr, NULL);
