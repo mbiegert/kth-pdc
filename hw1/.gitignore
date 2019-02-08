@@ -1,0 +1,12 @@
+# things to exclude
+# python cache
+__pycache__
+
+# do not share the presumably copyrighted Parula Colormap by Mathworks Inc.
+parula.py
+colormap_parula.h
+
+# exclude the binary and generated images
+mandelbrot
+*.png
+*.txt
