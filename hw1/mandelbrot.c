@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
     }
     else {
         // If we are not the collector, just send it over to the process of rank 0
-        printf("Sending %d bytes, rank %d.\n", PIXEL_WIDTH*num_rows, rank);
+        //printf("Sending %d bytes, rank %d.\n", PIXEL_WIDTH*num_rows, rank);
         rc = MPI_Send(color, PIXEL_WIDTH*num_rows, MPI_UNSIGNED_CHAR, 0, 0, MPI_COMM_WORLD);
         free(color);
     }
