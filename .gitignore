@@ -11,3 +11,4 @@ mandelbrot
 solver
 *.png
 *.txt
+*.bin
