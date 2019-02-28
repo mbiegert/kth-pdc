@@ -13,10 +13,8 @@
  * 
  * The equation will be solved by a Jacobi iteration and data
  * will be linearly distributed among the nodes.
- * The final result will be written to a binary file whose consisting of
- * a header of 1 byte that specifies how many of the next bytes should
- * be interpreted as an unsigned integer. This integer gives the number
- * of doubles that follow and specify the actual function values.
+ * The final result will be written to an ascii text file, where each
+ * row is one value.
  * 
  * The python program "generate_plot.py" can be used to create a plot of
  * the computed data.
@@ -68,7 +66,7 @@ int main(int argc, char **argv) {
     const size_t iteration_steps = 10000;
 
     // default output file name
-    char* outfile_name = "udata.bin";
+    char* outfile_name = "udata.txt";
 
     // calculate the step size given the above parameters
     const double grid_step_size = (upper_limit - lower_limit) / (grid_size - 1);
@@ -200,55 +198,42 @@ int main(int argc, char **argv) {
     }
 
     // we are done and only have to output
+    char mode = 'a';
+    int temp;
     if (rank == 0) {
-        FILE* fp = fopen(outfile_name, "w");
-        if (!fp) {
-            printf("Failed to open file \"%s\" on processor of rank %d.\n", outfile_name, rank);
-            return -1;
-        }
-
-        // since we are root, initialise the file with a header
-        char int_size = sizeof(size_t);
-        fwrite(&int_size, sizeof(char), 1, fp);
-        fwrite(&grid_size, sizeof(size_t), 1, fp);
-
-        if (size == 1) {
-            // we need to take special care here, since in this we also
-            // need to write the last double in the array, and do not
-            // send a signal to the next process
-            fwrite(u_old, sizeof(*u_old), array_size, fp);
-            fclose(fp);
-        }
-        if (size > 1) {
-            // write the array out
-            fwrite(u_old, sizeof(*u_old), array_size-1, fp);
-            fclose(fp);
-            // send out the signal to the next process
-            MPI_Send(&rank, 1, MPI_INTEGER, rank+1, 0, MPI_COMM_WORLD);
-        }
+        mode = 'w';
     }
-    else {
-        int temp;
+
+    if (rank > 0) {
         // wait for the previous process to be finished
         MPI_Recv(&temp, 1, MPI_INTEGER, rank-1, 0, MPI_COMM_WORLD, &status);
-        FILE* fp = fopen(outfile_name, "a");
-        if (!fp) {
-            printf("Failed to open file \"%s\" on processor of rank %d.\n", outfile_name, rank);
-            return -1;
-        }
+    }
 
-        // write the array out
-        if (rank == size-1) {
-            fwrite(u_old+1, sizeof(*u_old), array_size-1, fp);
-            fclose(fp);
-        }
-        else {
-            fwrite(u_old+1, sizeof(*u_old), array_size-2, fp);
-            fclose(fp);
+    // open the file
+    FILE* fp = fopen(outfile_name, &mode);
+    if (!fp) {
+        printf("Failed to open file \"%s\" on processor of rank %d.\n", outfile_name, rank);
+        return -1;
+    }
 
-            // send out the signal to the next process
-            MPI_Send(&temp, 1, MPI_INTEGER, rank+1, 0, MPI_COMM_WORLD);
-        }
+    if (rank == 0) {
+        fprintf(fp, "%f\n", u_old[0]);
+    }
+
+    // write the array out
+    for (i = 1; i<array_size-1; ++i) {
+        fprintf(fp, "%f\n", u_old[i]);
+    }
+
+    if (rank == size-1) {
+        fprintf(fp, "%f\n", u_old[array_size-1]);
+    }
+
+    fclose(fp);
+
+    // notify the next process, if applicable
+    if (rank < size-1) {
+        MPI_Send(&rank, 1, MPI_INTEGER, rank+1, 0, MPI_COMM_WORLD);
     }
 
     // clean up
