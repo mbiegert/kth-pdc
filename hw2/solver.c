@@ -98,20 +98,6 @@ int main(int argc, char **argv) {
     rc = MPI_Comm_size(MPI_COMM_WORLD, &size);
     rc = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // MPI checks *before* execution, if the rank in the MPI_Send and MPI_Recv
-    // functions is valid. If size == 0, or this is the last process rank+1
-    // won't be valid, so we need to apply a trick here.
-    // The same goes for rank-1 if this is the root process.
-    int previous_process, next_process = 0;
-    if (size > 1) {
-        if (rank != 0) {
-            previous_process = rank-1;
-        }
-        if (rank != size-1) {
-            next_process = rank+1;
-        }
-    }
-
     // First determine how many points we will compute according to the
     // linear distribution, to allocate the correct amount of memory needed.
     // The overlap a=2, so we need one ghost point to the left and one to the right.
@@ -180,34 +166,34 @@ int main(int argc, char **argv) {
             if (rank == 0) {
                 // only send up
                 rc = MPI_Send(u_old+array_size-2, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
-                rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, next_process, 0, MPI_COMM_WORLD, &status);
+                rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &status);
             }
             else if (rank == size-1) {
                 if (rank % 2 == 0) {
                     // we need to send first
-                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD);
-                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &status);
                 }
                 else {
                     // we need to receive first
-                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD, &status);
-                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
                 }
             }
             else {
                 if (rank % 2 == 0) {
                     // send up -> recv up -> send down -> recv down
-                    rc = MPI_Send(u_old+array_size-2, 1, MPI_DOUBLE, next_process, 0, MPI_COMM_WORLD);
-                    rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, next_process, 0, MPI_COMM_WORLD, &status);
-                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD);
-                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+array_size-2, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &status);
                 }
                 else {
                     // recv down -> send down -> recv up -> recv down
-                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD, &status);
-                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, previous_process, 0, MPI_COMM_WORLD);
-                    rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, next_process, 0, MPI_COMM_WORLD, &status);
-                    rc = MPI_Send(u_old+array_size-2, 1, MPI_DOUBLE, next_process, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+1, 1, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
+                    rc = MPI_Recv(u_old+array_size-1, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &status);
+                    rc = MPI_Send(u_old+array_size-2, 1, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
                 }
             }
         }
@@ -238,13 +224,13 @@ int main(int argc, char **argv) {
             fwrite(u_old, sizeof(*u_old), array_size-1, fp);
             fclose(fp);
             // send out the signal to the next process
-            MPI_Send(&rank, 1, MPI_INTEGER, next_process, 0, MPI_COMM_WORLD);
+            MPI_Send(&rank, 1, MPI_INTEGER, rank+1, 0, MPI_COMM_WORLD);
         }
     }
     else {
         int temp;
         // wait for the previous process to be finished
-        MPI_Recv(&temp, 1, MPI_INTEGER, previous_process, 0, MPI_COMM_WORLD, &status);
+        MPI_Recv(&temp, 1, MPI_INTEGER, rank-1, 0, MPI_COMM_WORLD, &status);
         FILE* fp = fopen(outfile_name, "a");
         if (!fp) {
             printf("Failed to open file \"%s\" on processor of rank %d.\n", outfile_name, rank);
@@ -261,7 +247,7 @@ int main(int argc, char **argv) {
             fclose(fp);
 
             // send out the signal to the next process
-            MPI_Send(&temp, 1, MPI_INTEGER, next_process, 0, MPI_COMM_WORLD);
+            MPI_Send(&temp, 1, MPI_INTEGER, rank+1, 0, MPI_COMM_WORLD);
         }
     }
 
