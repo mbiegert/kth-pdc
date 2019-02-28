@@ -14,7 +14,7 @@
  * The equation will be solved by a Jacobi iteration and data
  * will be linearly distributed among the nodes.
  * The final result will be written to an ascii text file, where each
- * row is one value.
+ * row is one value. The first line contains the number of iterations.
  * 
  * The python program "generate_plot.py" can be used to create a plot of
  * the computed data.
@@ -29,18 +29,19 @@
 #include<assert.h>
 #include<getopt.h>
 #include<libgen.h> // for basename()
+#include<math.h>
 
 // choose a function r(x) <= 0
 double r(double x) {
-    double ret = -1;
-    //double ret = -x;
+    //double ret = -1;
+    double ret = -x;
     assert(ret <= 0);
     return ret;
 }
 
 // choose a right hand side f(x)
 double f(double x) {
-    return 0;
+    return -(2*M_PI) * (2*M_PI) * sin(2*M_PI*x) - x*sin(2*M_PI*x);
 }
 
 double min(double a, double b) {
@@ -217,6 +218,7 @@ int main(int argc, char **argv) {
     }
 
     if (rank == 0) {
+        fprintf(fp, "%d\n", iteration_steps);
         fprintf(fp, "%f\n", u_old[0]);
     }
 
