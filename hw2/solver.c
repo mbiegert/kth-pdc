@@ -57,7 +57,7 @@ double f(double x) {
     const double cosine = cos(2*PI*x*exp(k*(x-1)));
     const double sine = sin(2*PI*x*exp(k*(x-1)));
     const double expo = exp(k*(x-1));
-    return cosine*(2*PI*k*expo*(2+k*x)) + sine*pow(2*PI*expo*(k*x+1), 2) + r(x)*u_exact(x);
+    return cosine*(2*PI*k*expo*(2+k*x)) - sine*pow(2*PI*expo*(k*x+1), 2) + r(x)*u_exact(x);
 }
 
 double min(double a, double b) {
@@ -79,8 +79,8 @@ int main(int argc, char **argv) {
     // grid_size specifies the number of evaluations of the function
     // the first grid point corresponds to lower_limit and the last
     // grid point to upper_limit
-    const size_t grid_size = 10000; // > 1
-    const size_t iteration_steps = 1000000;
+    const size_t grid_size = 1002; // > 1
+    const size_t iteration_steps = 10000000;
 
     // default output file name
     char* outfile_name = "udata.txt";
@@ -214,6 +214,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    // @TODO: This for loop is wrong! It produces too high offsets.
     // lastly calculate the error
     double* error = malloc(array_size * sizeof(*error));
     for (i = 0; i<array_size; ++i) {

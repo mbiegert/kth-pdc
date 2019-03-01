@@ -14,6 +14,8 @@ f.close()
 y = data[:,0]
 err = data[:,1]
 
+u = lambda x: np.sin(2*np.pi*x*np.exp(2.0*(x-1)))
+
 # we need to calculate the x values
 x = np.linspace(0, 1, num=y.size, endpoint=True)
 
@@ -24,6 +26,7 @@ ax.plot(x,y)
 ax.set(title='u(x) at {} points with {} iterations.'.format(x.size, iterations))
 ax.grid()
 
+err = abs(u(x)-y)
 ax = fig.add_subplot(212)
 ax.plot(x, err)
 ax.set(title='error')
