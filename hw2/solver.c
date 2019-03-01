@@ -31,6 +31,16 @@
 #include<libgen.h> // for basename()
 #include<math.h>
 
+static const double PI = 3.14159265358979323846;
+
+// "stiffness" parameter
+static const double k = 2.0;
+
+// this function is used to plot the error
+double u_exact(double x) {
+    return sin(2*PI*x*exp(k*(x-1)));
+}
+
 // choose a function r(x) <= 0
 double r(double x) {
     //double ret = -1;
@@ -41,7 +51,13 @@ double r(double x) {
 
 // choose a right hand side f(x)
 double f(double x) {
-    return -(2*M_PI) * (2*M_PI) * sin(2*M_PI*x) - x*sin(2*M_PI*x);
+    // this right hand side produces a nice sine curve
+    //return -(2*PI) * (2*PI) * sin(2*PI*x) - x*sin(2*PI*x);
+
+    const double cosine = cos(2*PI*x*exp(k*(x-1)));
+    const double sine = sin(2*PI*x*exp(k*(x-1)));
+    const double expo = exp(k*(x-1));
+    return cosine*(2*PI*k*expo*(2+k*x)) + sine*pow(2*PI*expo*(k*x+1), 2) + r(x)*u_exact(x);
 }
 
 double min(double a, double b) {
@@ -63,8 +79,8 @@ int main(int argc, char **argv) {
     // grid_size specifies the number of evaluations of the function
     // the first grid point corresponds to lower_limit and the last
     // grid point to upper_limit
-    const size_t grid_size = 100; // > 1
-    const size_t iteration_steps = 10000;
+    const size_t grid_size = 10000; // > 1
+    const size_t iteration_steps = 1000000;
 
     // default output file name
     char* outfile_name = "udata.txt";
@@ -198,6 +214,12 @@ int main(int argc, char **argv) {
         }
     }
 
+    // lastly calculate the error
+    double* error = malloc(array_size * sizeof(*error));
+    for (i = 0; i<array_size; ++i) {
+        error[i] = fabs(u_exact(offset+(i-1)*grid_step_size) - u_old[i]);
+    }
+
     // we are done and only have to output
     char mode = 'a';
     int temp;
@@ -219,16 +241,16 @@ int main(int argc, char **argv) {
 
     if (rank == 0) {
         fprintf(fp, "%d\n", iteration_steps);
-        fprintf(fp, "%f\n", u_old[0]);
+        fprintf(fp, "%f %f\n", u_old[0], error[0]);
     }
 
     // write the array out
     for (i = 1; i<array_size-1; ++i) {
-        fprintf(fp, "%f\n", u_old[i]);
+        fprintf(fp, "%f %f\n", u_old[i], error[i]);
     }
 
     if (rank == size-1) {
-        fprintf(fp, "%f\n", u_old[array_size-1]);
+        fprintf(fp, "%f %f\n", u_old[array_size-1], error[array_size-1]);
     }
 
     fclose(fp);
