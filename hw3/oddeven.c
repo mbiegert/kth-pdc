@@ -6,17 +6,10 @@
  * 
  * Author: Max Biegert
  * 
- * oddeven.c - generate a mandelbrot set for
- * f(z) = z^2 + d
+ * oddeven.c - sort a randomly generated array
  * 
- * generates an ascii file per default
- * 
- * use ./mandelbrot --output-mode png --output-file <filename> --palette so
- * to create png output (if compiled with -DENABLE_PNG, requires libpng)
- * available palettes for png are
- * "so": found on stack overflow (see below in function write_png_...)
- * "interpolated": my favourite, a linear interpolation of the 8bit colour values RRRGGGBB
- * "parula": requires colormaps_parula.h on compiling, filled in with the Matlab parula palette
+ * use ./oddeven 100 to randomly create 100 numbers in [0,1)
+ * and sort them. Output will be generated to stdout
  * 
  */
 
@@ -25,6 +18,7 @@
 #include <string.h>
 #include <mpi.h>
 #include <assert.h>
+#include <time.h>
 
 // expects left and right to be two sorted arrays of given length
 // afterwards [left,right] will be two sorted arrays, where every element
@@ -33,6 +27,12 @@ void merge(double* left, int size_left, double* right, int size_right);
 
 // do a full merge sort of the given array
 void merge_sort(double* array, int length);
+
+#ifdef DEBUG
+#define DPRINTF(fmt, args...) printf(fmt, ## args)
+#else
+#define DPRINTF(fmt, args...)
+#endif
 
 int main(int argc, char **argv) {
     int rank, size, rc, i;
@@ -54,8 +54,8 @@ int main(int argc, char **argv) {
     int N = atoi(argv[1]);
 
     // local size, linear data distribution
-    int local_size = N/size + (rank < N%size);
-    int max_neighbour_size = N/size + (rank <= N%size);
+    const int local_size = N/size + (rank < N%size);
+    const int max_neighbour_size = N/size + (rank <= N%size);
     // allocate space for list elements
     double* local_list = malloc(local_size * sizeof(*local_list));
     double* incoming_list = malloc(max_neighbour_size * sizeof(*incoming_list));
@@ -66,12 +66,6 @@ int main(int argc, char **argv) {
         local_list[i] = ((double) random())/((long)RAND_MAX+1);
     }
 
-    // debug:
-    printf("initial array on rank %d\n", rank);
-    for (i = 0; i < local_size-1; i++) {
-        printf("%f, ", local_list[i]);
-    }
-    printf("%f\n", local_list[local_size-1]);
     // sort the local list initially
     merge_sort(local_list, local_size);
 
@@ -86,26 +80,30 @@ int main(int argc, char **argv) {
 
     // we need P iterations of either even or odd steps
     for (i = 0; i < size; ++i) {
-        evenphase = i%2 == 0;
+        evenphase = (i%2 == 0);
         if (rank%2 == 0) {
             // evenphase
             // but do not communicate upwards if we are the last
             if (evenphase && rank < size-1) {
+                DPRINTF("Rank %d, step %d, communicating up.\n", rank, i);
                 MPI_Sendrecv(local_list, local_size, MPI_DOUBLE, rank+1, 0,
                             incoming_list, max_neighbour_size, MPI_DOUBLE,
                             rank+1, 0, MPI_COMM_WORLD, &status);
-                // how much did we receive actually
+                // how much did we actually receive
                 MPI_Get_count(&status, MPI_DOUBLE, &received_size);
+                DPRINTF("Rank %d, step %d, number of received doubles: %d\n", rank, i, received_size);
                 // merge such that the smaller numbers are in the local_list
                 merge(local_list, local_size, incoming_list, received_size);
             }
             // also do not communicate down
-            else if (rank > 0) {
+            else if (!evenphase && rank > 0) {
+                DPRINTF("Rank %d, step %d, communicating down.\n", rank, i);
                 MPI_Sendrecv(local_list, local_size, MPI_DOUBLE, rank-1, 1,
                             incoming_list, max_neighbour_size, MPI_DOUBLE,
                             rank-1, 1, MPI_COMM_WORLD, &status);
-                // how much did we receive actually
+                // how much did we actually receive
                 MPI_Get_count(&status, MPI_DOUBLE, &received_size);
+                DPRINTF("Rank %d, step %d, number of received doubles: %d\n", rank, i, received_size);
                 // merge such that the larger numbers are in the local list
                 merge(incoming_list, received_size, local_list, local_size);
             }
@@ -114,33 +112,62 @@ int main(int argc, char **argv) {
         else {
             // odd processors always communicate down, since they cannot have rank==0
             if (evenphase) {
+                DPRINTF("Rank %d, step %d, communicating down.\n", rank, i);
                 MPI_Sendrecv(local_list, local_size, MPI_DOUBLE, rank-1, 0,
                             incoming_list, max_neighbour_size, MPI_DOUBLE,
                             rank-1, 0, MPI_COMM_WORLD, &status);
-                // how much did we receive actually
+                // how much did we actually receive
                 MPI_Get_count(&status, MPI_DOUBLE, &received_size);
+                DPRINTF("Rank %d, step %d, number of received doubles: %d\n", rank, i, received_size);
                 // merge such that the larger numbers are in the local_list
                 merge(incoming_list, received_size, local_list, local_size);
             }
             // but do not communicate up if we're the last one
             else if (rank < size-1) {
-                MPI_Sendrecv(local_list, local_size, MPI_DOUBLE, rank+1, 0,
+                DPRINTF("Rank %d, step %d, communicating up.\n", rank, i);
+                MPI_Sendrecv(local_list, local_size, MPI_DOUBLE, rank+1, 1,
                             incoming_list, max_neighbour_size, MPI_DOUBLE,
-                            rank+1, 0, MPI_COMM_WORLD, &status);
-                // how much did we receive actually
+                            rank+1, 1, MPI_COMM_WORLD, &status);
+                // how much did we actually receive
                 MPI_Get_count(&status, MPI_DOUBLE, &received_size);
+                DPRINTF("Rank %d, step %d, number of received doubles: %d\n", rank, i, received_size);
                 // merge such that the smaller numbers are in the local list
                 merge(local_list, local_size, incoming_list, received_size);
             }
         }
     }
 
-    // generate some sort of output
-    printf("rank %d:\n", rank);
-    for (i = 0; i < local_size-1; ++i) {
-        printf("%f, ", local_list[i]);
+    DPRINTF("Rank %d, awaiting output slot.\n", rank);
+    // generate output to fileout
+    // create header if root process or wait for previous process
+    char filename[15];
+    FILE* fp;
+    if (rank == 0) {
+        // determine filename
+        time_t timestamp = time(NULL);
+        struct tm* now = gmtime(&timestamp);
+        sprintf(filename, "output-%02d%02d", now->tm_hour, now->tm_min);
+        fp = fopen(filename, "w");
     }
-    printf("%f\n", local_list[local_size-1]);
+    else {
+        MPI_Recv(filename, 15, MPI_CHAR, rank-1, 0, MPI_COMM_WORLD, &status);
+        fp = fopen(filename, "a");
+    }
+
+    // print our part of the array
+    for (i = 0; i < local_size; ++i) {
+        fprintf(fp, "%f ", local_list[i]);
+    }
+    
+    // signal the next process if applicable
+    if (rank < size-1) {
+        fclose(fp);
+        MPI_Send(filename, 15, MPI_CHAR, rank+1, 0, MPI_COMM_WORLD);
+    }
+    else {
+        fprintf(fp, "\n");
+        fclose(fp);
+    }
 
     // cleanup and close MPI connections
     free(local_list);
