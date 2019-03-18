@@ -1,6 +1,7 @@
 # things to exclude
 
 __pycache__
+*.zip
 
 # do not share the presumably copyrighted Parula Colormap by Mathworks Inc.
 parula.py
@@ -9,6 +10,7 @@ colormap_parula.h
 # exclude binaries and generated output
 mandelbrot
 solver
+oddeven
 *.png
 *.txt
 *.bin
